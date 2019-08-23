@@ -23,6 +23,8 @@ use Novosga\Entity\ServicoInterface;
 use Novosga\Http\Envelope;
 use App\Service\AtendimentoService;
 use App\Service\ServicoService;
+use Novosga\Event\EventDispatcherInterface;
+use Novosga\Event\TicketPlacedEventInterface;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -178,14 +180,35 @@ class DefaultController extends AbstractController
      *
      * @Route("/distribui_senha", name="novosga_triage_distribui_senha", methods={"POST"})
      */
-    public function distribuiSenha(Request $request, AtendimentoService $atendimentoService)
-    {
+    public function distribuiSenha(
+        Request $request,
+        AtendimentoService $atendimentoService,
+        EventDispatcherInterface $dispatcher,
+        TicketPlacedEventInterface $event
+    ) {
         $json = json_decode($request->getContent());
         
         $envelope = new Envelope();
         $usuario = $this->getUser();
         $unidade = $usuario->getLotacao()->getUnidade();
+
+        $data = new \stdClass();
+        $data->servico = null;
+        $data->prioridade = null;
+        $data->cliente = new Cliente();
         
+        $form = $this
+            ->createForm(\Novosga\TriageBundle\Form\TicketType::class, $data, [
+                'unidade' => $unidade,
+            ])
+            ->submit($json);
+
+        foreach ($form->getErrors() as $error) {
+            // dump($error->getOrigin()->getData(), $error->getMessage());
+        }
+        dd($form->createView());
+        exit;
+
         $servico    = isset($json->servico) ? (int) $json->servico : 0;
         $prioridade = isset($json->prioridade) ? (int) $json->prioridade : 0;
         
@@ -195,11 +218,26 @@ class DefaultController extends AbstractController
             $cliente->setNome($json->cliente->nome ?? '');
             $cliente->setDocumento($json->cliente->documento ?? '');
         }
-        
-        $data = $atendimentoService->distribuiSenha($unidade, $usuario, $servico, $prioridade, $cliente);
-        $envelope->setData($data);
 
-        return $this->json($envelope);
+
+        dd($form->createView());
+
+        $atendimento = new Atendimento();
+        $atendimento
+            ->setUnidade($unidade)
+            ->setUsuario($usuario)
+            ->setServico($servico)
+            ->setPrioridade($prioridade)
+            ->setCliente($cliente);
+
+        $event->setAtendimento($atendimento);
+
+        $dispatcher->dispatch($event);
+        
+        // $data = $atendimentoService->distribuiSenha($unidade, $usuario, $servico, $prioridade, $cliente);
+        // $envelope->setData($data);
+
+        return $this->json($atendimento);
     }
 
     /**

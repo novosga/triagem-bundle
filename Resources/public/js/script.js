@@ -225,8 +225,7 @@
                     var data = {
                         servico: servico,
                         prioridade: prioridade,
-                        cliente: self.cliente,
-                        unidade: self.unidade.id
+                        cliente: self.cliente
                     };
 
                     App.ajax({
